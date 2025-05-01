@@ -3,7 +3,7 @@ name: CI - CD
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - '*'
     branches:
       - main
 
@@ -18,11 +18,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Build Docker image with Tag
         id: build-image
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/jobs-api:latest .
-
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/jobs-api:$TAG_NAME .
+          # Check semver tag (vX.Y.Z)
+          if [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            docker tag ${{ secrets.DOCKER_USERNAME }}/jobs-api:$TAG_NAME ${{ secrets.DOCKER_USERNAME }}/jobs-api:latest
+          fi
       - name: Log in to Docker Hub
         if: success() && steps.build-image.outcome == 'success'
         uses: docker/login-action@v3
@@ -33,12 +37,16 @@ jobs:
       - name: Push Docker image
         if: success() && steps.build-image.outcome == 'success'
         run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/jobs-api:latest
-
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          docker push ${{ secrets.DOCKER_USERNAME }}/jobs-api:$TAG_NAME
+          if [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            docker push ${{ secrets.DOCKER_USERNAME }}/jobs-api:latest
+          fi
       - name: CD (refresh render service if SemVer Tag)
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          if [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo -e "🚀 Refreshing Render Service .. 🚀"
             response=$(curl -s -w "%{http_code}" -o response_body.txt https://api.render.com/deploy/${{ secrets.RENDER_CD_SERVICE_ID }}?key=${{ secrets.RENDER_CD_KEY }})
             http_code="${response: -3}"
