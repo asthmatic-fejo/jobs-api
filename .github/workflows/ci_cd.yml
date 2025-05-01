@@ -1,0 +1,56 @@
+name: CI - CD
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        id: build-image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/jobs-api:latest .
+
+      - name: Log in to Docker Hub
+        if: success() && steps.build-image.outcome == 'success'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TKN }}
+
+      - name: Push Docker image
+        if: success() && steps.build-image.outcome == 'success'
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/jobs-api:latest
+
+      - name: CD (refresh render service if SemVer Tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo -e "🚀 Refreshing Render Service .. 🚀"
+            response=$(curl -s -w "%{http_code}" -o response_body.txt https://api.render.com/deploy/${{ RENDER_CD_SERVICE_ID }}?key=${{ RENDER_CD_KEY }})
+            http_code="${response: -3}"
+            body=$(cat response_body.txt)
+      
+            if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+              echo -e "\033[1;32m🚀 CD Successful!\033[0m"
+            else
+              echo -e "\033[1;31m🚨 CD ERROR\033[0m"
+              echo -e "\033[1;33mResponse body:\033[0m"
+              echo "$body"
+            fi
+          else
+            echo -e "\033[1;34mℹ️ Tag ${GITHUB_REF_NAME} does not match semver pattern, skipping CD.\033[0m"
+          fi
