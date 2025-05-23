@@ -6,10 +6,10 @@ const config: Config = {
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },
-  rootDir: 'src',
-  testRegex: '.*\\.spec\\.ts$',
-  collectCoverageFrom: ['**/*.(t|j)s'],
-  coverageDirectory: '../coverage',
+  rootDir: "..",
+  testRegex: '.*\\.e2e-spec\\.ts$',
+  coverageDirectory: './coverage',
+  collectCoverageFrom: ['src/**/*.(t|j)s'],
 };
 
 export default config;
